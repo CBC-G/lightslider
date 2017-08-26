@@ -75,13 +75,16 @@
             on = false,
             elSize = 0,
             $slide = '',
+            $pagerList = '',
             scene = 0,
             property = (settings.vertical === true) ? 'height' : 'width',
             gutter = (settings.vertical === true) ? 'margin-bottom' : 'margin-right',
             slideValue = 0,
+            thumbValue = 0,
             pagerWidth = 0,
             slideWidth = 0,
             thumbWidth = 0,
+            isDragingThumbsNow = false,
             interval = null,
             isTouch = ('ontouchstart' in document.documentElement);
         var refresh = {};
@@ -397,26 +400,26 @@
                     var $pager = $cSouter.find('.lSPager').find('li');
                     $pager.first().addClass('active');
                     $pager.on('click', function () {
-                        if (settings.loop === true && settings.mode === 'slide') {
-                            scene = scene + ($pager.index(this) - $cSouter.find('.lSPager').find('li.active').index());
-                        } else {
-                            scene = $pager.index(this);
-                        }
-                        $el.mode(false);
-                        if (settings.gallery === true) {
-                            $this.slideThumb();
+                        if (!isDragingThumbsNow) {
+                            if (settings.loop === true && settings.mode === 'slide') {
+                                scene = scene + ($pager.index(this) - $cSouter.find('.lSPager').find('li.active').index());
+                            } else {
+                                scene = $pager.index(this);
+                            }
+                            $el.mode(false);
+                            if (settings.gallery === true) {
+                                $this.slideThumb();
+                            }
                         }
                         return false;
                     });
                 };
                 if (settings.pager) {
-                    var cl = 'lSpg';
-                    if (settings.gallery) {
-                        cl = 'lSGallery';
-                    }
+                    var cl = (settings.gallery ? 'lSGallery' : 'lSpg'),
+                        gMargin = (settings.vertical ? 'margin-left' : 'margin-top');
                     $slide.after('<ul class="lSPager ' + cl + '"></ul>');
-                    var gMargin = (settings.vertical) ? 'margin-left' : 'margin-top';
-                    $slide.parent().find('.lSPager').css(gMargin, settings.galleryMargin + 'px');
+                    $pagerList = $slide.parent().find('.lSPager');
+                    $pagerList.css(gMargin, settings.galleryMargin + 'px');
                     refresh.createPager();
                 }
 
@@ -452,7 +455,7 @@
                         if (!interval) {
                             $this.auto();
                         }   
-                    }else{
+                    } else {
                         obj.find('img').on('load', function () {
                             setTimeout(function () {
                                 setCss();
@@ -462,7 +465,7 @@
                             }, 100);
                         });
                     }
-                }else{
+                } else {
                     if (!interval) {
                         $this.auto();
                     }
@@ -523,7 +526,7 @@
                     }
                 }
             },
-            move: function (ob, v) {
+            move: function (ob, v, setActive) {
                 if (settings.rtl === true) {
                     v = -v;
                 }
@@ -550,12 +553,15 @@
                         }, settings.speed, settings.easing);
                     }
                 }
-                var $thumb = $slide.parent().find('.lSPager').find('li');
-                this.active($thumb, true);
+                if (typeof setActive === 'undefined' || setActive !== true) {
+                    var $thumb = $slide.parent().find('.lSPager').find('li');
+                    this.active($thumb, true);
+                }
+                return v;
             },
             fade: function () {
                 this.active($children, false);
-                var $thumb = $slide.parent().find('.lSPager').find('li');
+                var $thumb = $pagerList.find('li');
                 this.active($thumb, true);
             },
             slide: function () {
@@ -609,35 +615,43 @@
                 }
                 return _sV;
             },
-            slideThumb: function () {
-                var position;
-                switch (settings.currentPagerPosition) {
-                case 'left':
-                    position = 0;
-                    break;
-                case 'middle':
-                    position = (elSize / 2) - (thumbWidth / 2);
-                    break;
-                case 'right':
-                    position = elSize - thumbWidth;
-                }
-                var sc = scene - $el.find('.clone.left').length;
-                var $pager = $slide.parent().find('.lSPager');
-                if (settings.mode === 'slide' && settings.loop === true) {
-                    if (sc >= $pager.children().length) {
-                        sc = 0;
-                    } else if (sc < 0) {
-                        sc = $pager.children().length;
+            slideThumb: function (keepVisible = true) {
+                var position,
+                    sc = scene - $el.find('.clone.left').length,
+                    maxWidth = pagerWidth - elSize - settings.thumbMargin;
+                if (keepVisible) {
+                    switch (settings.currentPagerPosition) {
+                    case 'left':
+                        position = 0;
+                        break;
+                    case 'middle':
+                        position = (elSize / 2) - (thumbWidth / 2);
+                        break;
+                    case 'right':
+                        position = elSize - thumbWidth;
+                    }
+                    if (settings.mode === 'slide' && settings.loop === true) {
+                        if (sc >= $pagerList.children().length) {
+                            sc = 0;
+                        } else if (sc < 0) {
+                            sc = $pagerList.children().length;
+                        }
+                    }
+                    thumbValue = sc * ((thumbWidth + settings.thumbMargin)) - (position);
+                } else {
+                    var finalThreshold = thumbValue % (thumbWidth + settings.thumbMargin);
+                    if (finalThreshold < thumbWidth / 2) {
+                        thumbValue -= finalThreshold;
+                    } else {
+                        thumbValue += thumbWidth + settings.thumbMargin - finalThreshold;
                     }
                 }
-                var thumbSlide = sc * ((thumbWidth + settings.thumbMargin)) - (position);
-                if ((thumbSlide + elSize) > pagerWidth) {
-                    thumbSlide = pagerWidth - elSize - settings.thumbMargin;
+                if (thumbValue > maxWidth) {
+                    thumbValue = maxWidth;
+                } else if (thumbValue < 0) {
+                    thumbValue = 0;
                 }
-                if (thumbSlide < 0) {
-                    thumbSlide = 0;
-                }
-                this.move($pager, thumbSlide);
+                this.move($pagerList, thumbValue);
             },
             auto: function () {
                 if (settings.auto) {
@@ -663,18 +677,27 @@
                     });
                 }
             },
-            touchMove: function (endCoords, startCoords) {
-                $slide.css('transition-duration', '0ms');
-                if (settings.mode === 'slide') {
-                    var distance = endCoords - startCoords;
-                    var swipeVal = slideValue - distance;
-                    if ((swipeVal) >= w - elSize - settings.slideMargin) {
+            touchMove: function (endCoords, startCoords, isThumbs) {
+                var swipeVal,
+                    maxLength,
+                    distance = endCoords - startCoords;
+                if (isThumbs) {
+                    isDragingThumbsNow = true;
+                    $pagerList.css('transition-duration', '0ms');
+                    swipeVal = thumbValue - distance;
+                    maxLength = $pagerList.width() - elSize - settings.thumbMargin;
+                } else {
+                    $slide.css('transition-duration', '0ms');
+                    swipeVal = slideValue - distance;
+                    maxLength = w - elSize - settings.slideMargin;
+                }
+                if (isThumbs || settings.mode === 'slide') {
+                    if ((swipeVal) >= maxLength) {
                         if (settings.freeMove === false) {
-                            swipeVal = w - elSize - settings.slideMargin;
+                            swipeVal = maxLength;
                         } else {
-                            var swipeValT = w - elSize - settings.slideMargin;
+                            var swipeValT = maxLength;
                             swipeVal = swipeValT + ((swipeVal - swipeValT) / 5);
-
                         }
                     } else if (swipeVal < 0) {
                         if (settings.freeMove === false) {
@@ -683,78 +706,92 @@
                             swipeVal = swipeVal / 5;
                         }
                     }
-                    this.move($el, swipeVal);
+                    if (isThumbs) {
+                        this.move($pagerList, swipeVal, true);
+                    } else {
+                        this.move($el, swipeVal);
+                    }
                 }
             },
-
-            touchEnd: function (distance) {
-                $slide.css('transition-duration', settings.speed + 'ms');
-                if (settings.mode === 'slide') {
-                    var mxVal = false;
-                    var _next = true;
-                    slideValue = slideValue - distance;
-                    if ((slideValue) > w - elSize - settings.slideMargin) {
-                        slideValue = w - elSize - settings.slideMargin;
-                        if (settings.autoWidth === false) {
-                            mxVal = true;
-                        }
-                    } else if (slideValue < 0) {
-                        slideValue = 0;
+            touchEnd: function (distance, isThumbs) {
+                var maxLength;
+                if (isThumbs) {
+                    $pagerList.css('transition-duration', settings.speed + 'ms');
+                    maxLength = $pagerList.width() - elSize - settings.thumbMargin;
+                    thumbValue = thumbValue - distance;
+                    if ((thumbValue) > maxLength) {
+                        thumbValue = maxLength;
+                    } else if (thumbValue < 0) {
+                        thumbValue = 0;
                     }
-                    var gC = function (next) {
-                        var ad = 0;
-                        if (!mxVal) {
-                            if (next) {
-                                ad = 1;
+                    this.slideThumb(false);
+                } else {
+                    $slide.css('transition-duration', settings.speed + 'ms');
+                    maxLength = w - elSize - settings.slideMargin;
+                    if (settings.mode === 'slide') {
+                        var mxVal = false,
+                            _next = true;
+                        slideValue = slideValue - distance;
+                        if (slideValue > maxLength) {
+                            slideValue = maxLength;
+                            if (settings.autoWidth === false) {
+                                mxVal = true;
                             }
+                        } else if (slideValue < 0) {
+                            slideValue = 0;
                         }
-                        if (!settings.autoWidth) {
-                            var num = slideValue / ((slideWidth + settings.slideMargin) * settings.slideMove);
-                            scene = parseInt(num) + ad;
-                            if (slideValue >= (w - elSize - settings.slideMargin)) {
-                                if (num % 1 !== 0) {
+                        var gC = function (next) {
+                            var finalThreshold = distance % elSize;
+                            if (finalThreshold > 0 && finalThreshold <= settings.swipeThreshold) {
+                                slideValue += finalThreshold;
+                            } else if(finalThreshold < 0 && finalThreshold >= -settings.swipeThreshold) {
+                                next = false;
+                            }                    
+                            var ad = (!mxVal && next ? 1 : 0);
+                            if (!settings.autoWidth) {
+                                var num = slideValue / ((slideWidth + settings.slideMargin) * settings.slideMove);
+                                scene = parseInt(num) + ad;
+                                if (slideValue >= maxLength && num % 1 !== 0) {
                                     scene++;
                                 }
-                            }
-                        } else {
-                            var tW = 0;
-                            for (var i = 0; i < $children.length; i++) {
-                                tW += (parseInt($children.eq(i).width()) + settings.slideMargin);
-                                scene = i + ad;
-                                if (tW >= slideValue) {
-                                    break;
+                            } else {
+                                var tW = 0;
+                                for (var i = 0; i < $children.length; i++) {
+                                    tW += (parseInt($children.eq(i).width()) + settings.slideMargin);
+                                    scene = i + ad;
+                                    if (tW >= slideValue) {
+                                        break;
+                                    }
                                 }
                             }
+                        };
+                        if (distance >= settings.swipeThreshold) {
+                            gC(false);
+                            _next = false;
+                        } else if (distance <= -settings.swipeThreshold) {
+                            gC(true);
+                            _next = false;
                         }
-                    };
-                    if (distance >= settings.swipeThreshold) {
-                        gC(false);
-                        _next = false;
-                    } else if (distance <= -settings.swipeThreshold) {
-                        gC(true);
-                        _next = false;
-                    }
-                    $el.mode(_next);
-                    this.slideThumb();
-                } else {
-                    if (distance >= settings.swipeThreshold) {
-                        $el.goToPrevSlide();
-                    } else if (distance <= -settings.swipeThreshold) {
-                        $el.goToNextSlide();
+                        $el.mode(_next);
+                        this.slideThumb();
+                    } else {
+                        if (distance >= settings.swipeThreshold) {
+                            $el.goToPrevSlide();
+                        } else if (distance <= -settings.swipeThreshold) {
+                            $el.goToNextSlide();
+                        }
                     }
                 }
             },
-
-
-
             enableDrag: function () {
                 var $this = this;
                 if (!isTouch) {
                     var startCoords = 0,
                         endCoords = 0,
-                        isDraging = false;
+                        isDraging = false,
+                        isDragingThumbs = false;
                     $slide.find('.lightSlider').addClass('lsGrab');
-                    $slide.on('mousedown', function (e) {
+                    $slide.add($pagerList).on('mousedown', function (e) {
                         if (w < elSize) {
                             if (w !== 0) {
                                 return false;
@@ -762,90 +799,100 @@
                         }
                         if ($(e.target).attr('class') !== ('lSPrev') && $(e.target).attr('class') !== ('lSNext')) {
                             startCoords = (settings.vertical === true) ? e.pageY : e.pageX;
-                            isDraging = true;
                             if (e.preventDefault) {
                                 e.preventDefault();
                             } else {
                                 e.returnValue = false;
                             }
+                            if ($(this).is($pagerList)) {
+                                isDragingThumbs = true;
+                                isDragingThumbsNow = false;
+                                $pagerList.addClass('lsGrabbing');
+                            } else {
+                                isDraging = true;
+                                $slide.find('.lightSlider').removeClass('lsGrab').addClass('lsGrabbing');
+                            }
                             // ** Fix for webkit cursor issue https://code.google.com/p/chromium/issues/detail?id=26723
-                            $slide.scrollLeft += 1;
-                            $slide.scrollLeft -= 1;
+                            $(this).scrollLeft += 1;
+                            $(this).scrollLeft -= 1;
                             // *
-                            $slide.find('.lightSlider').removeClass('lsGrab').addClass('lsGrabbing');
                             clearInterval(interval);
                         }
                     });
                     $(window).on('mousemove', function (e) {
                         if (isDraging) {
                             endCoords = (settings.vertical === true) ? e.pageY : e.pageX;
-                            $this.touchMove(endCoords, startCoords);
+                            $this.touchMove(endCoords, startCoords, false);
+                        } else if (isDragingThumbs) {
+                            endCoords = (settings.vertical === true) ? e.pageY : e.pageX;
+                            $this.touchMove(endCoords, startCoords, true);
                         }
                     });
                     $(window).on('mouseup', function (e) {
-                        if (isDraging) {
-                            $slide.find('.lightSlider').removeClass('lsGrabbing').addClass('lsGrab');
-                            isDraging = false;
+                        if (isDraging || isDragingThumbs) {
                             endCoords = (settings.vertical === true) ? e.pageY : e.pageX;
                             var distance = endCoords - startCoords;
-                            if (Math.abs(distance) >= settings.swipeThreshold) {
-                                $(window).on('click.ls', function (e) {
-                                    if (e.preventDefault) {
-                                        e.preventDefault();
-                                    } else {
-                                        e.returnValue = false;
-                                    }
-                                    e.stopImmediatePropagation();
-                                    e.stopPropagation();
-                                    $(window).off('click.ls');
-                                });
+                            if (isDraging) {
+                                $slide.find('.lightSlider').removeClass('lsGrabbing').addClass('lsGrab');
+                                if (Math.abs(distance) >= settings.swipeThreshold) {
+                                    $(window).on('click.ls', function (e) {
+                                        if (e.preventDefault) {
+                                            e.preventDefault();
+                                        } else {
+                                            e.returnValue = false;
+                                        }
+                                        e.stopImmediatePropagation();
+                                        e.stopPropagation();
+                                        $(window).off('click.ls');
+                                    });
+                                }
+                                $this.touchEnd(distance, false);
+                                isDraging = false;
+                            } else if (isDragingThumbs) {
+                                $pagerList.removeClass('lsGrabbing');
+                                $this.touchEnd(distance, true);
+                                isDragingThumbs = false;
                             }
-
-                            $this.touchEnd(distance);
-
                         }
                     });
                 }
             },
-
-
-
-
             enableTouch: function () {
                 var $this = this;
                 if (isTouch) {
                     var startCoords = {},
                         endCoords = {};
-                    $slide.on('touchstart', function (e) {
+                    $slide.add($pagerList).on('touchstart', function (e) {
                         endCoords = e.originalEvent.targetTouches[0];
                         startCoords.pageX = e.originalEvent.targetTouches[0].pageX;
                         startCoords.pageY = e.originalEvent.targetTouches[0].pageY;
                         clearInterval(interval);
+                        isDragingThumbsNow = false;
                     });
-                    $slide.on('touchmove', function (e) {
+                    $slide.add($pagerList).on('touchmove', function (e) {
                         if (w < elSize) {
                             if (w !== 0) {
                                 return false;
                             }
                         }
-                        var orig = e.originalEvent;
+                        var isThumbs = $(this).is($pagerList),
+                            orig = e.originalEvent,
+                            xMovement = Math.abs(endCoords.pageX - startCoords.pageX),
+                            yMovement = Math.abs(endCoords.pageY - startCoords.pageY);
                         endCoords = orig.targetTouches[0];
-                        var xMovement = Math.abs(endCoords.pageX - startCoords.pageX);
-                        var yMovement = Math.abs(endCoords.pageY - startCoords.pageY);
                         if (settings.vertical === true) {
                             if ((yMovement * 3) > xMovement) {
                                 e.preventDefault();
                             }
-                            $this.touchMove(endCoords.pageY, startCoords.pageY);
+                            $this.touchMove(endCoords.pageY, startCoords.pageY, isThumbs);
                         } else {
                             if ((xMovement * 3) > yMovement) {
                                 e.preventDefault();
                             }
-                            $this.touchMove(endCoords.pageX, startCoords.pageX);
+                            $this.touchMove(endCoords.pageX, startCoords.pageX, isThumbs);
                         }
-
                     });
-                    $slide.on('touchend', function () {
+                    $slide.add($pagerList).on('touchend', function () {
                         if (w < elSize) {
                             if (w !== 0) {
                                 return false;
@@ -864,8 +911,12 @@
             build: function () {
                 var $this = this;
                 $this.initialStyle();
+                $this.pager();
+                $this.pauseOnHover();
+                $this.controls();
+                $this.keyPress();
+                
                 if (this.doCss()) {
-
                     if (settings.enableTouch === true) {
                         $this.enableTouch();
                     }
@@ -877,15 +928,9 @@
                 $(window).on('focus', function(){
                     $this.auto();
                 });
-                
                 $(window).on('blur', function(){
                     clearInterval(interval);
                 });
-
-                $this.pager();
-                $this.pauseOnHover();
-                $this.controls();
-                $this.keyPress();
             }
         };
         plugin.build();
