@@ -382,6 +382,9 @@
   cursor: -ms-grab;
   cursor: grab;
 }
+.lSPager.lsGrabbing,
+.lSPager.lsGrabbing > *,
+.lSPager.lsGrabbing > * > *,
 .lightSlider.lsGrabbing > * {
   cursor: move;
   cursor: -webkit-grabbing;
